@@ -1,0 +1,121 @@
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Custom Functions')
+    .addItem('Update Ticker Metrics', 'updateTickerMetrics')
+    .addItem('Update from Selected Row', 'promptForStartingRow')
+    .addToUi();
+}
+
+function updateTickerMetrics() {
+  const startRow = 2; // Start from row 2 (A2) by default
+  updateTickerMetricsFromRow(startRow);
+}
+
+function promptForStartingRow() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt('Start from which row?', 'Please enter the starting row number:', ui.ButtonSet.OK_CANCEL);
+
+  if (response.getSelectedButton() == ui.Button.OK) {
+    const startRow = parseInt(response.getResponseText());
+    if (!isNaN(startRow) && startRow > 1) {
+      updateTickerMetricsFromRow(startRow);
+    } else {
+      ui.alert('Invalid row number. Please enter a valid row number greater than 1.');
+    }
+  } else {
+    ui.alert('No row selected.');
+  }
+}
+
+function updateTickerMetricsFromRow(startRow) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const dataSheet = prepareDataSheet();
+  const tickers = sheet.getRange(`A${startRow}:A`).getValues().flat().filter(String);
+
+  tickers.forEach((ticker, index) => {
+    if (ticker) {
+      const metrics = getMetrics(ticker.trim(), dataSheet);
+      const rowIndex = startRow + index;
+
+      // Ensure the metrics array has 3 elements
+      if (metrics.length === 3) {
+        sheet.getRange(`B${rowIndex}:D${rowIndex}`).setValues([metrics]);
+      } else {
+        // Handle error case: set empty or error values to the row
+        sheet.getRange(`B${rowIndex}:D${rowIndex}`).setValues([['Error', 'Error', 'Error']]);
+      }
+    }
+  });
+}
+
+function prepareDataSheet() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet();
+  let dataSheet = sheet.getSheetByName('HiddenDataFetch');
+  if (!dataSheet) {
+    dataSheet = sheet.insertSheet('HiddenDataFetch');
+    dataSheet.hideSheet();
+  } else {
+    dataSheet.clear(); // This is now allowed since it's not in a custom function
+  }
+  return dataSheet;
+}
+
+function getMetrics(ticker, dataSheet) {
+  const today = new Date();
+  const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 6, today.getDate());
+  const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
+  const oneMonthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+
+  try {
+    const data6Months = getHistoricalData(dataSheet, ticker, sixMonthsAgo, today);
+    const data3Months = getHistoricalData(dataSheet, ticker, threeMonthsAgo, today);
+    const data1Month = getHistoricalData(dataSheet, ticker, oneMonthAgo, today);
+
+    const return6Months = calculateReturn(data6Months);
+    const return3Months = calculateReturn(data3Months);
+    const return1Month = calculateReturn(data1Month);
+
+    return [
+      return1Month,
+      return3Months,
+      return6Months
+    ];
+  } catch (e) {
+    // Return an array of three elements for error handling
+    return [`Error: ${e.message}`, 'Error', 'Error'];
+  }
+}
+
+function getHistoricalData(dataSheet, ticker, startDate, endDate) {
+  const startDateString = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const endDateString = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  // Insert formula to fetch historical data
+  dataSheet.getRange('A1').setFormula(`=GOOGLEFINANCE("${ticker}", "close", DATE(${startDate.getFullYear()}, ${startDate.getMonth() + 1}, ${startDate.getDate()}), DATE(${endDate.getFullYear()}, ${endDate.getMonth() + 1}, ${endDate.getDate()}), "DAILY")`);
+
+  SpreadsheetApp.flush();
+  Utilities.sleep(5000); // Increase sleep time to ensure data is fetched properly
+
+  const dataRange = dataSheet.getRange('A2:B').getValues();
+  const data = dataRange.filter(row => row[0] && row[1]); // Filter out empty rows
+
+  if (data.length === 0) {
+    throw new Error(`No data available for ${ticker} between ${startDateString} and ${endDateString}`);
+  }
+
+  return data.map(row => ({ date: row[0], close: row[1] }));
+}
+
+function calculateReturn(data) {
+  if (data.length < 2) {
+    throw new Error('Insufficient data to calculate returns.');
+  }
+
+  const initialClose = data[0].close;
+  const finalClose = data[data.length - 1].close;
+
+  const returnValue = ((finalClose - initialClose) / initialClose) * 100; // Return in percentage
+  return returnValue.toFixed(2); // Return with two decimal places
+}
+
+
