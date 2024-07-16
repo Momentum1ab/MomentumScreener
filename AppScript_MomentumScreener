@@ -91,12 +91,24 @@ function getHistoricalData(dataSheet, ticker, startDate, endDate) {
   const endDateString = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
   // Insert formula to fetch historical data
-  dataSheet.getRange('A1').setFormula(`=GOOGLEFINANCE("${ticker}", "close", DATE(${startDate.getFullYear()}, ${startDate.getMonth() + 1}, ${startDate.getDate()}), DATE(${endDate.getFullYear()}, ${endDate.getMonth() + 1}, ${endDate.getDate()}), "DAILY")`);
+  const formula = `=GOOGLEFINANCE("${ticker}", "close", DATE(${startDate.getFullYear()}, ${startDate.getMonth() + 1}, ${startDate.getDate()}), DATE(${endDate.getFullYear()}, ${endDate.getMonth() + 1}, ${endDate.getDate()}), "DAILY")`;
+  dataSheet.getRange('A1').setFormula(formula);
 
   SpreadsheetApp.flush();
-  Utilities.sleep(5000); // Increase sleep time to ensure data is fetched properly
 
-  const dataRange = dataSheet.getRange('A2:B').getValues();
+  // Wait for data to populate
+  let attempts = 0;
+  let dataRange;
+  do {
+    Utilities.sleep(500);
+    dataRange = dataSheet.getRange('A2:B').getValues();
+    attempts++;
+  } while (dataRange.length === 0 && attempts < 10);
+
+  if (dataRange.length === 0) {
+    throw new Error(`No data available for ${ticker} between ${startDateString} and ${endDateString}`);
+  }
+
   const data = dataRange.filter(row => row[0] && row[1]); // Filter out empty rows
 
   if (data.length === 0) {
