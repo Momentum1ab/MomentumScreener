@@ -1,0 +1,128 @@
+import React, { useState, useEffect } from 'react';
+import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, Label } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+
+const EfficientFrontierVisualization = () => {
+  const [weightA, setWeightA] = useState(50);
+  const [correlation, setCorrelation] = useState(0);
+  const [data, setData] = useState([]);
+  const assetA = { return: 10, risk: 15, name: "Asset A" };
+  const assetB = { return: 8, risk: 10, name: "Asset B" };
+
+  useEffect(() => {
+    generateData();
+  }, [weightA, correlation]);
+
+  const generateData = () => {
+    const wA = weightA / 100;
+    const wB = 1 - wA;
+    const correlationFactor = correlation / 100;
+
+    const portfolioReturn = wA * assetA.return + wB * assetB.return;
+    const portfolioRisk = Math.sqrt(
+      wA * wA * assetA.risk * assetA.risk +
+      wB * wB * assetB.risk * assetB.risk +
+      2 * wA * wB * correlationFactor * assetA.risk * assetB.risk
+    );
+
+    const newData = [{ x: portfolioRisk, y: portfolioReturn }];
+
+    // Generate efficient frontier
+    for (let w = 0; w <= 1; w += 0.05) {
+      const r = w * assetA.return + (1 - w) * assetB.return;
+      const risk = Math.sqrt(
+        w * w * assetA.risk * assetA.risk +
+        (1 - w) * (1 - w) * assetB.risk * assetB.risk +
+        2 * w * (1 - w) * correlationFactor * assetA.risk * assetB.risk
+      );
+      newData.push({ x: risk, y: r });
+    }
+
+    setData(newData);
+  };
+
+  return (
+    <Card className="w-full max-w-3xl mx-auto">
+      <CardHeader>
+        <CardTitle>Interactive Efficient Frontier Visualization</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-4">
+          <p className="mb-2">Weight of Asset A (Blue): {weightA}%</p>
+          <Slider
+            value={[weightA]}
+            onValueChange={(value) => setWeightA(value[0])}
+            max={100}
+            step={1}
+          />
+        </div>
+        <div className="mb-4">
+          <p className="mb-2">Correlation: {correlation}%</p>
+          <Slider
+            value={[correlation]}
+            onValueChange={(value) => setCorrelation(value[0])}
+            min={-100}
+            max={100}
+            step={1}
+          />
+        </div>
+        <ResponsiveContainer width="100%" height={400}>
+          <ScatterChart margin={{ top: 20, right: 20, bottom: 60, left: 60 }}>
+            <CartesianGrid />
+            <XAxis 
+              type="number" 
+              dataKey="x" 
+              name="Risk" 
+              unit="%" 
+              domain={[0, 20]} 
+              label={{ value: "Risk (%)", position: "bottom", offset: 0 }}
+            />
+            <YAxis 
+              type="number" 
+              dataKey="y" 
+              name="Return" 
+              unit="%" 
+              domain={[0, 15]} 
+              label={{ value: "Return (%)", angle: -90, position: "left", offset: 20 }}
+            />
+            <ZAxis range={[64, 144]} />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+            <Legend verticalAlign="top" height={36}/>
+            <Scatter name="Efficient Frontier" data={data} fill="#8884d8" line shape="circle" />
+            <Scatter name="Current Portfolio" data={[data[0]]} fill="#ff7300" shape="star" size={100} />
+            <ReferenceDot x={assetA.risk} y={assetA.return} r={5} fill="blue" stroke="none">
+              <Label value="A" position="top" />
+            </ReferenceDot>
+            <ReferenceDot x={assetB.risk} y={assetB.return} r={5} fill="green" stroke="none">
+              <Label value="B" position="top" />
+            </ReferenceDot>
+          </ScatterChart>
+        </ResponsiveContainer>
+        <div className="mt-4">
+          <p><strong>Asset A (Blue):</strong> Return = {assetA.return}%, Risk = {assetA.risk}%</p>
+          <p><strong>Asset B (Green):</strong> Return = {assetB.return}%, Risk = {assetB.risk}%</p>
+        </div>
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold">Portfolio Risk Formula:</h3>
+          <p className="font-mono mt-2">
+            σp = sqrt(wA^2 * σA^2 + wB^2 * σB^2 + 2 * wA * wB * ρAB * σA * σB)
+          </p>
+          <p className="mt-2">
+            Where:
+            <br />
+            σp = Portfolio risk
+            <br />
+            wA, wB = Weights of assets A and B
+            <br />
+            σA, σB = Risks of assets A and B
+            <br />
+            ρAB = Correlation between assets A and B
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default EfficientFrontierVisualization;
